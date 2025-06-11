@@ -1,0 +1,13 @@
+{
+  "bwpreset_path": "S:\\Bitwig Studio\\LIbrary\\Presets",
+  "vst3_path": "C:\\Program Files\\Common Files\\VST3",
+  "clap_path": "C:\\Program Files\\Common Files\\CLAP",
+  "urls": [
+    "https://github.com/tiagolr/time12",
+    "https://github.com/tiagolr/gate12",
+    "https://github.com/tiagolr/ripplerx",
+    "https://github.com/tiagolr/reevr",
+    "https://github.com/polarity/polarity-music-tools/raw/refs/heads/master/Bitwig-5.3/Match-Level-Volume.bwpreset",
+    "https://securecdn-hou1-1.oculus.com/binaries/download/?id=4430786440313619"
+  ]
+}
