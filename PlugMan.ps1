@@ -5,8 +5,8 @@ param(
     [Parameter(Mandatory=$false)]
     [string]$ConfigFile,
     
-    [string]$VST3_PATH = $(if ($env:VST3_PATH) { $env:VST3_PATH } else { "C:\Program Files\Common Files\VST3" }),
-    [string]$CLAP_PATH = $(if ($env:CLAP_PATH) { $env:CLAP_PATH } else { "C:\Program Files\Common Files\CLAP" }),
+    [string]$VST3_PATH,
+    [string]$CLAP_PATH,
     
     [switch]$Force
 )
@@ -16,16 +16,22 @@ function Show-Usage {
 PlugMan - VST3/CLAP Plugin Manager
 
 USAGE:
-    PlugMan.ps1 -Url <GitHubRepoUrl> [-VST3_PATH <path>] [-CLAP_PATH <path>] [-Force]
-    PlugMan.ps1 -ConfigFile <path> [-VST3_PATH <path>] [-CLAP_PATH <path>] [-Force]
-    PlugMan.ps1 [-VST3_PATH <path>] [-CLAP_PATH <path>] [-Force]
+    PlugMan.ps1 -Url <GitHubRepoUrl> [-Force]
+    PlugMan.ps1 -ConfigFile <path> [-Force]
 
 PARAMETERS:
-    -Url            GitHub repository URL (e.g., https://github.com/user/repo)
-    -ConfigFile     Path to JSON config file containing URLs
-    -VST3_PATH      VST3 installation directory (default: C:\Program Files\Common Files\VST3)
-    -CLAP_PATH      CLAP installation directory (default: C:\Program Files\Common Files\CLAP)
+    -Url            Install a Single Plugin from a GitHub repository URL (e.g., https://github.com/user/repo)
+    -ConfigFile     Path to JSON config file containing multiple plugin definitions
     -Force          Overwrite existing plugins without prompting
+
+ENVIRONMENT VARIABLES:
+    VST3_PATH      VST3 installation directory (default: C:\Program Files\Common Files\VST3)
+    CLAP_PATH      CLAP installation directory (default: C:\Program Files\Common Files\CLAP)
+
+PATH PRIORITY ORDER:
+    1. Environment variables (VST3_PATH, CLAP_PATH)
+    2. Config file 'config' section (vst3_path, clap_path)  
+    3. Default paths
 
 EXAMPLES:
     PlugMan.ps1 -Url "https://github.com/surge-synthesizer/surge"
@@ -37,11 +43,15 @@ CONFIG FILE FORMAT (JSON):
         "urls": [
             "https://github.com/user/repo1",
             "https://github.com/user/repo2"
-        ]
+        ],
+        "config": {
+            "vst3_path": "C:\\My Custom Path\\VST3",
+            "clap_path": "C:\\My Custom Path\\CLAP"
+        }
     }
 
 DEFAULT CONFIG LOCATION:
-    $env:USERPROFILE\.config\plugman\plugins.json
+    $env:USERPROFILE\.config\plugman\config.json
 
 "@ -ForegroundColor Yellow
 }
@@ -52,28 +62,60 @@ function Write-Log {
     Write-Host "[$timestamp] [$Level] $Message"
 }
 
-function Test-Paths {
-    $errors = @()
+function Initialize-Paths {
+    param([object]$Config = $null)
     
-    if (-not $VST3_PATH) {
-        $errors += "VST3_PATH not specified. Set environment variable or use -VST3_PATH parameter."
-    } elseif (-not (Test-Path $VST3_PATH)) {
-        try {
-            New-Item -ItemType Directory -Path $VST3_PATH -Force | Out-Null
-            Write-Log "Created VST3 directory: $VST3_PATH"
-        } catch {
-            $errors += "Cannot create VST3_PATH directory: $VST3_PATH"
+    # Initialize VST3_PATH with priority: env var > config > default
+    if (-not $script:VST3_PATH) {
+        if ($env:VST3_PATH) {
+            $script:VST3_PATH = $env:VST3_PATH
+            Write-Log "Using VST3_PATH from environment variable: $script:VST3_PATH"
+        } elseif ($Config -and $Config.vst3_path) {
+            $script:VST3_PATH = $Config.vst3_path
+            Write-Log "Using VST3_PATH from config file: $script:VST3_PATH"
+        } else {
+            $script:VST3_PATH = "C:\Program Files\Common Files\VST3"
+            Write-Log "Using default VST3_PATH: $script:VST3_PATH"
         }
     }
     
-    if (-not $CLAP_PATH) {
-        $errors += "CLAP_PATH not specified. Set environment variable or use -CLAP_PATH parameter."
-    } elseif (-not (Test-Path $CLAP_PATH)) {
+    # Initialize CLAP_PATH with priority: env var > config > default
+    if (-not $script:CLAP_PATH) {
+        if ($env:CLAP_PATH) {
+            $script:CLAP_PATH = $env:CLAP_PATH
+            Write-Log "Using CLAP_PATH from environment variable: $script:CLAP_PATH"
+        } elseif ($Config -and $Config.clap_path) {
+            $script:CLAP_PATH = $Config.clap_path
+            Write-Log "Using CLAP_PATH from config file: $script:CLAP_PATH"
+        } else {
+            $script:CLAP_PATH = "C:\Program Files\Common Files\CLAP"
+            Write-Log "Using default CLAP_PATH: $script:CLAP_PATH"
+        }
+    }
+}
+
+function Test-Paths {
+    $errors = @()
+    
+    if (-not $script:VST3_PATH) {
+        $errors += "VST3_PATH not specified. Set environment variable or define in config.json."
+    } elseif (-not (Test-Path $script:VST3_PATH)) {
         try {
-            New-Item -ItemType Directory -Path $CLAP_PATH -Force | Out-Null
-            Write-Log "Created CLAP directory: $CLAP_PATH"
+            New-Item -ItemType Directory -Path $script:VST3_PATH -Force | Out-Null
+            Write-Log "Created VST3 directory: $script:VST3_PATH"
         } catch {
-            $errors += "Cannot create CLAP_PATH directory: $CLAP_PATH"
+            $errors += "Cannot create VST3_PATH directory: $script:VST3_PATH"
+        }
+    }
+    
+    if (-not $script:CLAP_PATH) {
+        $errors += "CLAP_PATH not specified. Set environment variable or define in config.json."
+    } elseif (-not (Test-Path $script:CLAP_PATH)) {
+        try {
+            New-Item -ItemType Directory -Path $script:CLAP_PATH -Force | Out-Null
+            Write-Log "Created CLAP directory: $script:CLAP_PATH"
+        } catch {
+            $errors += "Cannot create CLAP_PATH directory: $script:CLAP_PATH"
         }
     }
     
@@ -156,18 +198,28 @@ function Install-Plugin {
             $pluginName = Split-Path $DestinationPath -Leaf
             Write-Log "Plugin already exists: $pluginName" "WARNING"
             
-            if (-not $Force) {
+            if (-not $Force -and -not $script:ForceAll) {
                 do {
-                    $response = Read-Host "Overwrite existing $PluginType plugin '$pluginName'? (y/n)"
+                    $response = Read-Host "Overwrite existing $PluginType plugin '$pluginName'? (y/n/a) [n]"
+                    if ([string]::IsNullOrWhiteSpace($response)) {
+                        $response = 'n'  # Default to 'n' when Enter is pressed
+                    }
                     $response = $response.ToLower()
-                } while ($response -ne 'y' -and $response -ne 'n' -and $response -ne 'yes' -and $response -ne 'no')
+                } while ($response -ne 'y' -and $response -ne 'n' -and $response -ne 'yes' -and $response -ne 'no' -and $response -ne 'a' -and $response -ne 'all')
                 
-                if ($response -eq 'n' -or $response -eq 'no') {
+                if ($response -eq 'a' -or $response -eq 'all') {
+                    $script:ForceAll = $true
+                    Write-Log "Setting force overwrite for all remaining plugins" "INFO"
+                } elseif ($response -eq 'n' -or $response -eq 'no') {
                     Write-Log "Skipping installation of $PluginType plugin: $pluginName" "INFO"
                     return $true
                 }
             } else {
-                Write-Log "Force flag specified, overwriting without prompt" "INFO"
+                if ($Force) {
+                    Write-Log "Force flag specified, overwriting without prompt" "INFO"
+                } else {
+                    Write-Log "Force all flag active, overwriting without prompt" "INFO"
+                }
             }
             
             Write-Log "Removing existing $PluginType plugin: $DestinationPath"
@@ -203,8 +255,18 @@ function Read-PluginConfig {
             throw "No URLs found in config file"
         }
         
+        $result = @{
+            urls = $urls
+            config = $null
+        }
+        
+        if ($jsonContent.config) {
+            $result.config = $jsonContent.config
+            Write-Log "Found config section in config file"
+        }
+        
         Write-Log "Found $($urls.Count) URLs in config file"
-        return $urls
+        return $result
         
     } catch {
         throw "Failed to read config file: $($_.Exception.Message)"
@@ -237,25 +299,34 @@ if ($Url -and $ConfigFile) {
     exit 1
 }
 
+# Global variable to track if user selected "all" for overwrite prompts
+$script:ForceAll = $false
+
 Write-Log "PlugMan - VST3/CLAP Plugin Manager"
 
 # Determine URLs to process
 $urlsToProcess = @()
+$configData = $null
 
 try {
     if ($Url) {
         Write-Log "Processing single URL: $Url"
         $urlsToProcess = @($Url)
+        Initialize-Paths
     } elseif ($ConfigFile) {
         Write-Log "Reading URLs from config file: $ConfigFile"
-        $urlsToProcess = Read-PluginConfig -ConfigPath $ConfigFile
+        $configData = Read-PluginConfig -ConfigPath $ConfigFile
+        $urlsToProcess = $configData.urls
+        Initialize-Paths -Config $configData.config
     } else {
         # Default config file path
-        $defaultConfigPath = Join-Path $env:USERPROFILE ".config\plugman\plugins.json"
+        $defaultConfigPath = Join-Path $env:USERPROFILE ".config\plugman\config.json"
         Write-Log "No URL or ConfigFile specified, checking default config: $defaultConfigPath"
         
         if (Test-Path $defaultConfigPath) {
-            $urlsToProcess = Read-PluginConfig -ConfigPath $defaultConfigPath
+            $configData = Read-PluginConfig -ConfigPath $defaultConfigPath
+            $urlsToProcess = $configData.urls
+            Initialize-Paths -Config $configData.config
         } else {
             Write-Host "`nNo URL specified and no default config file found." -ForegroundColor Red
             Write-Host "Please either:" -ForegroundColor Yellow
@@ -297,14 +368,14 @@ try {
             if ($asset.name -like "*.vst3") {
                 $downloadPath = Join-Path $tempDir $asset.name
                 if (Get-FileFromUrl -Url $asset.browser_download_url -OutputPath $downloadPath) {
-                    $destinationPath = Join-Path $VST3_PATH $asset.name
+                    $destinationPath = Join-Path $script:VST3_PATH $asset.name
                     Install-Plugin -SourcePath $downloadPath -DestinationPath $destinationPath -PluginType "VST3" -Force $Force
                     $vst3Found = $true
                 }
             } elseif ($asset.name -like "*.clap") {
                 $downloadPath = Join-Path $tempDir $asset.name
                 if (Get-FileFromUrl -Url $asset.browser_download_url -OutputPath $downloadPath) {
-                    $destinationPath = Join-Path $CLAP_PATH $asset.name
+                    $destinationPath = Join-Path $script:CLAP_PATH $asset.name
                     Install-Plugin -SourcePath $downloadPath -DestinationPath $destinationPath -PluginType "CLAP" -Force $Force
                     $clapFound = $true
                 }
@@ -333,14 +404,14 @@ try {
                         
                         foreach ($vst3Plugin in $plugins.VST3) {
                             $pluginName = Split-Path $vst3Plugin -Leaf
-                            $destinationPath = Join-Path $VST3_PATH $pluginName
+                            $destinationPath = Join-Path $script:VST3_PATH $pluginName
                             Install-Plugin -SourcePath $vst3Plugin -DestinationPath $destinationPath -PluginType "VST3" -Force $Force
                             $vst3Found = $true
                         }
                         
                         foreach ($clapPlugin in $plugins.CLAP) {
                             $pluginName = Split-Path $clapPlugin -Leaf
-                            $destinationPath = Join-Path $CLAP_PATH $pluginName
+                            $destinationPath = Join-Path $script:CLAP_PATH $pluginName
                             Install-Plugin -SourcePath $clapPlugin -DestinationPath $destinationPath -PluginType "CLAP" -Force $Force
                             $clapFound = $true
                         }
@@ -351,8 +422,8 @@ try {
     
         if ($vst3Found -or $clapFound) {
             Write-Log "Plugin installation completed for $currentUrl!" "SUCCESS"
-            if ($vst3Found) { Write-Log "VST3 plugins installed to: $VST3_PATH" }
-            if ($clapFound) { Write-Log "CLAP plugins installed to: $CLAP_PATH" }
+            if ($vst3Found) { Write-Log "VST3 plugins installed to: $script:VST3_PATH" }
+            if ($clapFound) { Write-Log "CLAP plugins installed to: $script:CLAP_PATH" }
         } else {
             Write-Log "No VST3 or CLAP plugins found for $currentUrl" "ERROR"
         }

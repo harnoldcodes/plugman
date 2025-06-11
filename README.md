@@ -9,7 +9,8 @@ A PowerShell script for automatically downloading and installing VST3 and CLAP p
 - 📦 **ZIP Archive Support**: Extracts plugins from Windows ZIP files when direct downloads aren't available
 - 📋 **Batch Processing**: Process multiple repositories from a JSON configuration file
 - 🔄 **Smart Overwrite**: Prompts before overwriting existing plugins (or use `-Force` to skip)
-- 📍 **Configurable Paths**: Set custom installation directories via environment variables or parameters
+- 📍 **Flexible Path Configuration**: Set installation directories via command-line, environment variables, or config file
+- 🎯 **Priority-Based Configuration**: Command-line parameters override environment variables, which override config file settings
 - 🛡️ **Safe Installation**: Creates directories if they don't exist and validates paths
 
 ## Installation
@@ -42,7 +43,7 @@ Run without parameters to use the default config file:
 ```powershell
 .\PlugMan.ps1
 ```
-This will look for `plugins.json` in `$env:USERPROFILE\.config\plugman\`
+This will look for `config.json` in `$env:USERPROFILE\.config\plugman\`
 
 ### Force Overwrite
 
@@ -57,8 +58,8 @@ Skip overwrite prompts for existing plugins:
 |-----------|------|-------------|---------|
 | `-Url` | String | GitHub repository URL | None |
 | `-ConfigFile` | String | Path to JSON configuration file | None |
-| `-VST3_PATH` | String | VST3 installation directory | `C:\Program Files\Common Files\VST3` |
-| `-CLAP_PATH` | String | CLAP installation directory | `C:\Program Files\Common Files\CLAP` |
+| `-VST3_PATH` | String | VST3 installation directory (overrides all other sources) | See Path Priority |
+| `-CLAP_PATH` | String | CLAP installation directory (overrides all other sources) | See Path Priority |
 | `-Force` | Switch | Overwrite existing plugins without prompting | False |
 
 ## Configuration File Format
@@ -71,20 +72,43 @@ Create a JSON file with the following structure:
     "https://github.com/surge-synthesizer/surge",
     "https://github.com/DISTRHO/Cardinal",
     "https://github.com/VCVRack/Fundamental"
-  ]
+  ],
+  "config": {
+    "vst3_path": "C:\\My Custom Path\\VST3",
+    "clap_path": "C:\\My Custom Path\\CLAP"
+  }
 }
 ```
+
+### Configuration Sections
+
+- **`urls`** (required): Array of GitHub repository URLs to process
+- **`config`** (optional): Configuration section with custom installation paths
+  - **`vst3_path`**: Custom VST3 installation directory
+  - **`clap_path`**: Custom CLAP installation directory
 
 ### Default Configuration Location
 
 If no parameters are provided, PlugMan looks for:
 ```
-%USERPROFILE%\.config\plugman\plugins.json
+%USERPROFILE%\.config\plugman\config.json
 ```
 
-Example: `C:\Users\YourName\.config\plugman\plugins.json`
+Example: `C:\Users\YourName\.config\plugman\config.json`
 
-## Environment Variables
+## Path Configuration
+
+PlugMan supports multiple ways to configure installation paths with the following priority order:
+
+### Path Priority Order
+1. **Command-line parameters** (`-VST3_PATH`, `-CLAP_PATH`) - Highest priority
+2. **Environment variables** (`VST3_PATH`, `CLAP_PATH`) - Medium priority  
+3. **Config file settings** (`config.vst3_path`, `config.clap_path`) - Low priority
+4. **Default paths** - Lowest priority
+   - VST3: `C:\Program Files\Common Files\VST3`
+   - CLAP: `C:\Program Files\Common Files\CLAP`
+
+### Environment Variables
 
 You can set default installation paths using environment variables:
 
@@ -129,7 +153,9 @@ $env:CLAP_PATH = "D:\Audio\CLAP"
 .\PlugMan.ps1 -ConfigFile "plugins.json" -Force
 ```
 
-### Sample Configuration File
+### Sample Configuration Files
+
+#### Basic Configuration
 Create `essential-plugins.json`:
 ```json
 {
@@ -142,9 +168,28 @@ Create `essential-plugins.json`:
 }
 ```
 
+#### Configuration with Custom Paths
+Create `studio-setup.json`:
+```json
+{
+  "urls": [
+    "https://github.com/surge-synthesizer/surge",
+    "https://github.com/DISTRHO/Cardinal"
+  ],
+  "config": {
+    "vst3_path": "D:\\Audio Software\\VST3 Plugins",
+    "clap_path": "D:\\Audio Software\\CLAP Plugins"
+  }
+}
+```
+
 Then run:
 ```powershell
+# Basic config
 .\PlugMan.ps1 -ConfigFile "essential-plugins.json"
+
+# Config with custom paths
+.\PlugMan.ps1 -ConfigFile "studio-setup.json"
 ```
 
 ## Supported Plugin Formats
