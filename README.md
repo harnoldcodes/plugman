@@ -1,11 +1,11 @@
 # PlugMan
 
-A PowerShell script for automatically downloading and installing VST3 and CLAP plugins from GitHub repositories.
+A PowerShell script for automatically downloading and installing VST3, CLAP plugins, and BWPreset files from GitHub repositories.
 
 ## Features
 
 - 🔽 **Automatic Downloads**: Fetches the latest release from GitHub repositories
-- 🎛️ **Multi-Format Support**: Handles both VST3 and CLAP plugin formats
+- 🎛️ **Multi-Format Support**: Handles VST3, CLAP plugin formats, and BWPreset files
 - 📦 **ZIP Archive Support**: Extracts plugins from Windows ZIP files when direct downloads aren't available
 - 📋 **Batch Processing**: Process multiple repositories from a JSON configuration file
 - 🔄 **Smart Overwrite**: Prompts before overwriting existing plugins (or use `-Force` to skip)
@@ -25,9 +25,24 @@ A PowerShell script for automatically downloading and installing VST3 and CLAP p
 
 ### Basic Usage
 
-Install a plugin from a single GitHub repository:
+Install from a GitHub repository:
 ```powershell
 .\PlugMan.ps1 -Url "https://github.com/surge-synthesizer/surge"
+```
+
+Install from a direct file URL:
+```powershell
+# Install a VST3 plugin directly
+.\PlugMan.ps1 -Url "https://example.com/plugin.vst3"
+
+# Install a CLAP plugin directly
+.\PlugMan.ps1 -Url "https://example.com/plugin.clap"
+
+# Install a BWPreset file directly
+.\PlugMan.ps1 -Url "https://example.com/preset.bwpreset"
+
+# Install from a ZIP file containing plugins
+.\PlugMan.ps1 -Url "https://example.com/plugins.zip"
 ```
 
 ### Batch Installation
@@ -56,10 +71,11 @@ Skip overwrite prompts for existing plugins:
 
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
-| `-Url` | String | GitHub repository URL | None |
+| `-Url` | String | GitHub repository URL or direct file URL (.vst3, .clap, .bwpreset, .zip) | None |
 | `-ConfigFile` | String | Path to JSON configuration file | None |
 | `-VST3_PATH` | String | VST3 installation directory (overrides all other sources) | See Path Priority |
 | `-CLAP_PATH` | String | CLAP installation directory (overrides all other sources) | See Path Priority |
+| `-BWPRESET_PATH` | String | BWPreset installation directory (overrides all other sources) | See Path Priority |
 | `-Force` | Switch | Overwrite existing plugins without prompting | False |
 
 ## Configuration File Format
@@ -71,21 +87,24 @@ Create a JSON file with the following structure:
   "urls": [
     "https://github.com/surge-synthesizer/surge",
     "https://github.com/DISTRHO/Cardinal",
-    "https://github.com/VCVRack/Fundamental"
+    "https://example.com/plugin.vst3",
+    "https://example.com/presets.zip"
   ],
   "config": {
     "vst3_path": "C:\\My Custom Path\\VST3",
-    "clap_path": "C:\\My Custom Path\\CLAP"
+    "clap_path": "C:\\My Custom Path\\CLAP",
+    "bwpreset_path": "C:\\My Custom Path\\BWPresets"
   }
 }
 ```
 
 ### Configuration Sections
 
-- **`urls`** (required): Array of GitHub repository URLs to process
+- **`urls`** (required): Array of GitHub repository URLs or direct file URLs to process
 - **`config`** (optional): Configuration section with custom installation paths
   - **`vst3_path`**: Custom VST3 installation directory
   - **`clap_path`**: Custom CLAP installation directory
+  - **`bwpreset_path`**: Custom BWPreset installation directory
 
 ### Default Configuration Location
 
@@ -101,12 +120,13 @@ Example: `C:\Users\YourName\.config\plugman\config.json`
 PlugMan supports multiple ways to configure installation paths with the following priority order:
 
 ### Path Priority Order
-1. **Command-line parameters** (`-VST3_PATH`, `-CLAP_PATH`) - Highest priority
-2. **Environment variables** (`VST3_PATH`, `CLAP_PATH`) - Medium priority  
-3. **Config file settings** (`config.vst3_path`, `config.clap_path`) - Low priority
+1. **Command-line parameters** (`-VST3_PATH`, `-CLAP_PATH`, `-BWPRESET_PATH`) - Highest priority
+2. **Environment variables** (`VST3_PATH`, `CLAP_PATH`, `BWPRESET_PATH`) - Medium priority  
+3. **Config file settings** (`config.vst3_path`, `config.clap_path`, `config.bwpreset_path`) - Low priority
 4. **Default paths** - Lowest priority
    - VST3: `C:\Program Files\Common Files\VST3`
    - CLAP: `C:\Program Files\Common Files\CLAP`
+   - BWPreset: `%USERPROFILE%\Documents\Bitwig Studio\Presets`
 
 ### Environment Variables
 
@@ -116,23 +136,37 @@ You can set default installation paths using environment variables:
 # Set permanently
 [Environment]::SetEnvironmentVariable("VST3_PATH", "D:\Audio\VST3", "User")
 [Environment]::SetEnvironmentVariable("CLAP_PATH", "D:\Audio\CLAP", "User")
+[Environment]::SetEnvironmentVariable("BWPRESET_PATH", "D:\Audio\BWPresets", "User")
 
 # Set for current session
 $env:VST3_PATH = "D:\Audio\VST3"
 $env:CLAP_PATH = "D:\Audio\CLAP"
+$env:BWPRESET_PATH = "D:\Audio\BWPresets"
 ```
 
 ## How It Works
 
+### For GitHub Repositories:
 1. **Repository Analysis**: Fetches the latest release from the GitHub API
-2. **Direct Downloads**: Looks for `.vst3` and `.clap` files in release assets
+2. **Direct Downloads**: Looks for `.vst3`, `.clap`, and `.bwpreset` files in release assets
 3. **ZIP Fallback**: If no direct files found, downloads ZIP files containing "win" in the name
 4. **Smart Extraction**: Recursively searches extracted content for plugin files
-5. **Safe Installation**: Checks for existing plugins and prompts for overwrite (unless `-Force` is used)
+
+### For Direct File URLs:
+1. **File Detection**: Automatically detects file type from URL extension
+2. **Direct Download**: Downloads the file directly from the provided URL
+3. **ZIP Extraction**: For ZIP files, extracts and searches for plugin files within
+4. **Smart Installation**: Installs files to appropriate directories based on type
+
+### Common Features:
+- **Safe Installation**: Checks for existing plugins and prompts for overwrite (unless `-Force` is used)
+- **Path Configuration**: Respects custom installation paths from all configuration sources
 
 ## Examples
 
 ### Single Plugin Installation
+
+#### GitHub Repository
 ```powershell
 # Install Surge synthesizer
 .\PlugMan.ps1 -Url "https://github.com/surge-synthesizer/surge"
@@ -142,6 +176,21 @@ $env:CLAP_PATH = "D:\Audio\CLAP"
 
 # Force overwrite existing plugins
 .\PlugMan.ps1 -Url "https://github.com/user/repo" -Force
+```
+
+#### Direct File URLs
+```powershell
+# Install a VST3 plugin directly
+.\PlugMan.ps1 -Url "https://releases.example.com/awesome-synth-v1.2.vst3"
+
+# Install a CLAP plugin with custom path
+.\PlugMan.ps1 -Url "https://cdn.example.com/effects/reverb.clap" -CLAP_PATH "D:\MyPlugins\CLAP"
+
+# Install BWPreset files
+.\PlugMan.ps1 -Url "https://presets.example.com/bank1.bwpreset"
+
+# Install from ZIP with force overwrite
+.\PlugMan.ps1 -Url "https://example.com/plugin-bundle.zip" -Force
 ```
 
 ### Batch Installation
@@ -162,23 +211,26 @@ Create `essential-plugins.json`:
   "urls": [
     "https://github.com/surge-synthesizer/surge",
     "https://github.com/DISTRHO/Cardinal",
-    "https://github.com/michaeldonovan/mbdsp",
-    "https://github.com/TheBoulder/Odin2"
+    "https://example.com/awesome-plugin.vst3",
+    "https://presets.example.com/bank.bwpreset"
   ]
 }
 ```
 
-#### Configuration with Custom Paths
+#### Configuration with Mixed URLs and Custom Paths
 Create `studio-setup.json`:
 ```json
 {
   "urls": [
     "https://github.com/surge-synthesizer/surge",
-    "https://github.com/DISTRHO/Cardinal"
+    "https://github.com/DISTRHO/Cardinal",
+    "https://releases.example.com/plugin.zip",
+    "https://presets.example.com/sounds.bwpreset"
   ],
   "config": {
     "vst3_path": "D:\\Audio Software\\VST3 Plugins",
-    "clap_path": "D:\\Audio Software\\CLAP Plugins"
+    "clap_path": "D:\\Audio Software\\CLAP Plugins",
+    "bwpreset_path": "D:\\Audio Software\\BWPresets"
   }
 }
 ```
@@ -196,6 +248,7 @@ Then run:
 
 - **VST3**: Installed to VST3_PATH (default: `C:\Program Files\Common Files\VST3`)
 - **CLAP**: Installed to CLAP_PATH (default: `C:\Program Files\Common Files\CLAP`)
+- **BWPreset**: Installed to BWPRESET_PATH (default: `%USERPROFILE%\Documents\Bitwig Studio\Presets`)
 
 ## Requirements
 
